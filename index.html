@@ -343,39 +343,35 @@ setInterval(() => $('clock').textContent = new Date().toLocaleTimeString(), 1000
 /* ---------- Fake ransom screen: shows 5 seconds after load ---------- */
 const ransom = $('ransom'), rbg = $('rbg'), rbctx = rbg.getContext('2d');
 let rTimer = null, rRain = null, secsLeft = 3599, rdrops = [];
-let bsodTimer = null;
-let tvTimer = null, tvLoop = null;
-function showFinalRansom() {
-  clearInterval(tvLoop);
-  $('tv').style.display = 'none'; $('bsod').style.display = 'none';
-  ransom.style.zIndex = 600;
-  showRansom(true);
+let tvLoop = null;
+const TIMELINE = [
+  { t:  3000, screen: 'ransom'      },  // 3s   ransom screen appears
+  { t:  5000, screen: 'bsod'        },  // 5s   blue screen
+  { t:  8000, screen: 'tv'          },  // 8s   TV static
+  { t: 10000, screen: 'ransomFinal' },  // 10s  ransom screen returns
+  { t: 11500, screen: 'tv'          },  // 11.5s TV static
+  { t: 13000, screen: 'ransomFinal' },  // 13s  ransom screen returns
+  { t: 14000, screen: 'tv'          },  // 14s  TV static
+  { t: 20000, screen: 'ransomFinal' }   // 20s  ransom screen returns for good
+];
+
+function stopTv()   { clearInterval(tvLoop); $('tv').style.display = 'none'; }
+function stopBsod() { $('bsod').style.display = 'none'; }
+
+const SCREENS = {
+  ransom()      { stopTv(); stopBsod(); showRansom(); },
+  bsod()        { showBsod(); },
+  tv()          { showTv(); },
+  ransomFinal() { showFinalRansom(); }
+};
+
+function runTimeline() {
+  TIMELINE.forEach(step => setTimeout(SCREENS[step.screen], step.t));
 }
-function showTv() {
-  $('tv').style.display = 'block';
-  setTimeout(showFinalRansom, 2500); // ransom screen returns 2.5s after the static screen opens (9s total)
-  const c = $('tvc'), x = c.getContext('2d'), img = x.createImageData(c.width, c.height), d = img.data;
-  clearInterval(tvLoop);
-  tvLoop = setInterval(() => {
-    for (let i = 0; i < d.length; i += 4) {
-      const v = 40 + Math.random() * 190;
-      d[i] = d[i+1] = d[i+2] = v; d[i+3] = 255;
-    }
-    // occasional rolling horizontal glitch band
-    const band = Math.floor(Math.random() * c.height), h = 2 + Math.floor(Math.random() * 6);
-    if (Math.random() < .3) for (let y = band; y < Math.min(band + h, c.height); y++)
-      for (let xx = 0; xx < c.width; xx++) { const k = (y*c.width + xx)*4; d[k] = d[k+1] = d[k+2] = 235; }
-    x.putImageData(img, 0, 0);
-  }, 45);
-}
-function showBsod() {
-  $('bsod').style.display = 'block'; clearInterval(rRain); clearInterval(rTimer);
-  clearTimeout(tvTimer); tvTimer = setTimeout(showTv, 1500); // TV static 1.5s after blue screen opens (6.5s total)
-}
+// showRansom: no longer schedules the BSOD itself
 function showRansom(isFinal) {
   ransom.style.display = 'flex'; fit(rbg);
-  if (isFinal === true) secsLeft = 3599; // final return of the ransom screen: restart the countdown
-  else { clearTimeout(bsodTimer); bsodTimer = setTimeout(showBsod, 2000); } // blue screen 2s after ransom screen opens (5s total)
+  if (isFinal === true) secsLeft = 3599;            // restart countdown on every return
   rdrops = Array(Math.ceil(rbg.width/16)).fill(0).map(()=>Math.random()*-40);
   clearInterval(rRain); clearInterval(rTimer);
   rRain = setInterval(() => {
@@ -388,6 +384,37 @@ function showRansom(isFinal) {
     secsLeft = secsLeft > 0 ? secsLeft - 1 : 0;
     $('timer').textContent = String(Math.floor(secsLeft/60)).padStart(2,'0') + ':' + String(secsLeft%60).padStart(2,'0');
   }, 1000);
+}
+
+// showBsod: no longer schedules the TV static
+function showBsod() {
+  $('bsod').style.display = 'block';
+  clearInterval(rRain); clearInterval(rTimer);
+}
+
+// showTv: no longer schedules the final ransom screen
+function showTv() {
+  $('tv').style.display = 'block';
+  const c = $('tvc'), x = c.getContext('2d'), img = x.createImageData(c.width, c.height), d = img.data;
+  clearInterval(tvLoop);
+  tvLoop = setInterval(() => {
+    for (let i = 0; i < d.length; i += 4) {
+      const v = 40 + Math.random() * 190;
+      d[i] = d[i+1] = d[i+2] = v; d[i+3] = 255;
+    }
+    const band = Math.floor(Math.random() * c.height), h = 2 + Math.floor(Math.random() * 6);
+    if (Math.random() < .3) for (let y = band; y < Math.min(band + h, c.height); y++)
+      for (let xx = 0; xx < c.width; xx++) { const k = (y*c.width + xx)*4; d[k] = d[k+1] = d[k+2] = 235; }
+    x.putImageData(img, 0, 0);
+  }, 45);
+}
+
+// showFinalRansom: unchanged
+function showFinalRansom() {
+  clearInterval(tvLoop);
+  $('tv').style.display = 'none'; $('bsod').style.display = 'none';
+  ransom.style.zIndex = 600;
+  showRansom(true);
 }
 function hideRansom() { ransom.style.display = 'none'; clearInterval(rRain); clearInterval(rTimer); }
 $('rdec').onclick = () => {
@@ -427,7 +454,7 @@ function startPrank() {
   if (started || ended) return; started = true;
   $('start').style.display = 'none';
   goFullscreen().catch(() => {});
-  setTimeout(showRansom, 3000);
+  runTimeline();
   try { history.pushState(null, '', location.href); } catch (e) {}
 }
 
