@@ -344,30 +344,40 @@ setInterval(() => $('clock').textContent = new Date().toLocaleTimeString(), 1000
 const ransom = $('ransom'), rbg = $('rbg'), rbctx = rbg.getContext('2d');
 let rTimer = null, rRain = null, secsLeft = 3599, rdrops = [];
 let tvLoop = null;
+/* ---------- Timeline (ms from the start of each cycle) ---------- */
+const CYCLE_MS = 20000;                       // the whole plan repeats every 20 seconds
 const TIMELINE = [
-  { t:  3000, screen: 'ransom'      },  // 3s   ransom screen appears
-  { t:  5000, screen: 'bsod'        },  // 5s   blue screen
-  { t:  8000, screen: 'tv'          },  // 8s   TV static
-  { t: 10000, screen: 'ransomFinal' },  // 10s  ransom screen returns
+  { t:  3000, screen: 'ransom'      },  // 3s    ransom screen appears
+  { t:  5000, screen: 'bsod'        },  // 5s    blue screen
+  { t:  8000, screen: 'tv'          },  // 8s    TV static
+  { t: 10000, screen: 'ransomFinal' },  // 10s   ransom screen returns
   { t: 11500, screen: 'tv'          },  // 11.5s TV static
-  { t: 13000, screen: 'ransomFinal' },  // 13s  ransom screen returns
-  { t: 14000, screen: 'tv'          },  // 14s  TV static
-  { t: 20000, screen: 'ransomFinal' }   // 20s  ransom screen returns for good
+  { t: 13000, screen: 'ransomFinal' },  // 13s   ransom screen returns
+  { t: 14000, screen: 'tv'          },  // 14s   TV static
+  { t: 20000, screen: 'ransomFinal' }   // 20s   ransom screen returns (end of cycle)
 ];
 
-function stopTv()   { clearInterval(tvLoop); $('tv').style.display = 'none'; }
-function stopBsod() { $('bsod').style.display = 'none'; }
-
-const SCREENS = {
-  ransom()      { stopTv(); stopBsod(); showRansom(); },
-  bsod()        { showBsod(); },
-  tv()          { showTv(); },
-  ransomFinal() { showFinalRansom(); }
-};
-
-function runTimeline() {
-  TIMELINE.forEach(step => setTimeout(SCREENS[step.screen], step.t));
+// Show exactly ONE of the three screens; the others are hidden and their loops stopped.
+function showScreen(name) {
+  if (ended) return;
+  clearInterval(tvLoop);
+  $('tv').style.display = 'none';
+  $('bsod').style.display = 'none';
+  ransom.style.zIndex = 300;                  // keep fixed layers: ransom 300 < bsod 400 < tv 500
+  if (name === 'ransom')      { showRansom(); }
+  if (name === 'ransomFinal') { showRansom(true); }
+  if (name === 'bsod')        { showBsod(); }
+  if (name === 'tv')          { showTv(); }
 }
+
+function runCycle() {
+  if (ended) return;
+  TIMELINE.forEach(step => { if (step.t < CYCLE_MS) setTimeout(() => showScreen(step.screen), step.t); });
+  setTimeout(() => showScreen('ransomFinal'), CYCLE_MS);   // 20s: end-of-cycle ransom screen
+  setTimeout(runCycle, CYCLE_MS);                          // next cycle starts at 20s, so it loops
+}
+function runTimeline() { runCycle(); }
+
 // showRansom: no longer schedules the BSOD itself
 function showRansom(isFinal) {
   ransom.style.display = 'flex'; fit(rbg);
@@ -410,12 +420,7 @@ function showTv() {
 }
 
 // showFinalRansom: unchanged
-function showFinalRansom() {
-  clearInterval(tvLoop);
-  $('tv').style.display = 'none'; $('bsod').style.display = 'none';
-  ransom.style.zIndex = 600;
-  showRansom(true);
-}
+function showFinalRansom() { showScreen('ransomFinal'); }
 function hideRansom() { ransom.style.display = 'none'; clearInterval(rRain); clearInterval(rTimer); }
 $('rdec').onclick = () => {
   const m = $('rmsg');
